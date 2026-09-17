@@ -19,7 +19,7 @@ webman 应用的容器运行时：PHP CLI Alpine + S6 Overlay v3 托管 webman �
 
 ```
 docker-webman/
-├── Dockerfile                      # 单阶段构建：PHP CLI Alpine + S6 v3 + Node/pnpm
+├── Dockerfile                      # 多阶段：node 官方镜像提供 Node/pnpm 二进制 + PHP CLI Alpine + S6 v3
 ├── entrypoint.sh                   # 校验挂载 / composer install / 权限修正 / 交给 S6
 ├── config/
 │   ├── php.ini                     # 默认 PHP 配置（容器内 zzz-webman.ini）
@@ -228,7 +228,9 @@ docker run --rm -v /path/to/your-app:/app -w /app/template \
 - pnpm 与 npm 的 registry 默认指向 `registry.npmmirror.com`，构建时可用
   `--build-arg NPM_MIRROR=https://registry.npmjs.org` 改回官方源。
 - pnpm 版本由 `--build-arg PNPM_VERSION=10` 决定。
-- Node 由基础镜像的 Alpine 仓库提供，版本随 Alpine 版本走。
+- **Node 版本由 `--build-arg NODE_VERSION` 固定（默认 22）**，二进制取自官方
+  `node:<版本>-alpine` 镜像而非 apk。apk 的 nodejs 会随 Alpine 仓库漂移
+  （曾装到 Node 24，导致 `cross-env` 的 ESM 入口报 `ERR_MODULE_NOT_FOUND`，前端构建失败）。
 - 构建产物位于 `/app/template/**/dist`，后端进程（cwd `/app/backend`）可直接读取。
 
 ---
@@ -263,8 +265,8 @@ git push origin 8.2-cli-alpine
 | 8.4 | `php:8.4-cli-alpine` | `8.4-cli-alpine` | `--build-arg PHP_VERSION=8.4` | 无需改任何代码 |
 | 8.5 | `php:8.5-cli-alpine` | `8.5-cli-alpine` | `--build-arg PHP_VERSION=8.5` | OPcache 已内置，脚本自动跳过编译 |
 
-> Node / pnpm 不受 PHP 版本影响：Node 由各自基础镜像的 Alpine 仓库提供（20/22 一线），
-> pnpm 版本统一由 `--build-arg PNPM_VERSION` 决定，pnpm 10 在 Node 18+ 均可用。
+> Node / pnpm 不受 PHP 版本影响：Node 由 `--build-arg NODE_VERSION`（默认 22）统一固定，
+> pnpm 版本由 `--build-arg PNPM_VERSION` 决定，pnpm 10 在 Node 18+ 均可用。
 
 ### 5.2 两种 tag 粒度
 
@@ -338,8 +340,9 @@ docker run -d --name webman -p 8787:8787 \
 | --- | --- | --- |
 | s6-overlay | `3.2.0.2` 精确 | 很少变动，固定更稳 |
 | PIE | `1.4.9` 精确 | 同上 |
+| Node | `22`（大版本） | 由 `--build-arg NODE_VERSION` 固定，二进制取自官方 node 镜像；apk 的 nodejs 已不再使用 |
 | pnpm | `10`（大版本） | 默认跟随 10.x；发布时可用 `--build-arg PNPM_VERSION=10.15.0` 精确固定 |
-| apk 包（nodejs/npm 及各类 -dev） | 不固定 | 随基础镜像的 Alpine 版本走，只有锁 base 镜像 digest 才能完全复现 |
+| apk 包（各类 -dev） | 不固定 | 随基础镜像的 Alpine 版本走，只有锁 base 镜像 digest 才能完全复现 |
 
 > 真要做到 100% 可复现，可以把 digest 也带上：
 > `docker build --build-arg PHP_VERSION=8.2.28 -t ... .` 配合
@@ -499,6 +502,7 @@ docker exec webman php -m | tr '\n' ' '
 | 端口不通 | webman 监听端口与 `-p` 映射不一致；改 `WEBMAN_CMD` 或 `config/server.php` |
 | `composer install` 慢或失败 | 设置 `--build-arg COMPOSER_MIRROR=`（默认已用阿里云） |
 | pnpm 安装慢 | 默认走 npmmirror；企业内网可改 `NPM_MIRROR` |
+| 前端构建报 `ERR_MODULE_NOT_FOUND` | 镜像内 Node 版本过新（旧镜像用 apk 装到过 Node 24）。重建镜像即修复（已固定 Node 22）；应急可用 `docker run --rm -v /path/to/your-app:/app -w /app/template/admin node:22-alpine sh -lc "npm i -g pnpm@10 && pnpm i --frozen-lockfile && pnpm run build"` |
 | 改代码不生效 | webman 常驻进程需 reload：`docker exec webman php start.php reload` |
 | 脚本报 `#!/bin/sh^M: not found` | 换行符被改成 CRLF，仓库已带 `.gitattributes`（强制 LF）；必要时 `dos2unix` |
 | 扩展编译失败（swoole / event / xlswriter） | 从 `EXTENSIONS` 移除后重建；PHP 8.5 上优先只保留稳定扩展 |
