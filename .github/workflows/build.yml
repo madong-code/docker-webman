@@ -1,7 +1,7 @@
 name: build-image
 
 # 版本控制：镜像 tag = PHP 版本号（如 8.2-cli-alpine）
-#   git tag 8.2-cli-alpine        → ghcr.io/<owner>/docker-webman:8.2-cli-alpine
+#   git tag 8.2-cli-alpine        → ghcr.io/madong-code/docker-webman:8.2-cli-alpine
 #   git tag 8.3.4-cli-alpine      → 同上，PHP 版本取 "-" 之前的部分
 on:
   push:
