@@ -121,6 +121,7 @@ RUN set -eux; \
     npm config set registry "${NPM_MIRROR}"; \
     npm install -g "pnpm@${PNPM_VERSION}"; \
     pnpm config set registry "${NPM_MIRROR}"; \
+    pnpm config set confirm-modules-purge false --global; \
     _prefix="$(npm prefix -g 2>/dev/null || echo /usr)"; \
     if [ -x "${_prefix}/bin/pnpm" ] && [ "${_prefix}/bin/pnpm" != "/usr/local/bin/pnpm" ]; then \
         ln -sf "${_prefix}/bin/pnpm" /usr/local/bin/pnpm; \

@@ -502,6 +502,7 @@ docker exec webman php -m | tr '\n' ' '
 | 端口不通 | webman 监听端口与 `-p` 映射不一致；改 `WEBMAN_CMD` 或 `config/server.php` |
 | `composer install` 慢或失败 | 设置 `--build-arg COMPOSER_MIRROR=`（默认已用阿里云） |
 | pnpm 安装慢 | 默认走 npmmirror；企业内网可改 `NPM_MIRROR` |
+| `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` | `node_modules` 是**跨环境**装的（宿主机 / 旧容器 / 换过 Node 版本），pnpm 检测到 store 配置不一致要删除重装，但 `proc_open` 没有 TTY 无法确认。镜像已设 `pnpm config set confirm-modules-purge false`；旧镜像可临时 `docker exec -it <容器> sh -lc "cd /app/template && CI=true pnpm install"`。**预防：依赖只在容器内装一次，别在宿主机装** |
 | 前端构建报 `ERR_MODULE_NOT_FOUND` | 镜像内 Node 版本过新（旧镜像用 apk 装到过 Node 24）。重建镜像即修复（已固定 Node 22）；应急可用 `docker run --rm -v /path/to/your-app:/app -w /app/template/admin node:22-alpine sh -lc "npm i -g pnpm@10 && pnpm i --frozen-lockfile && pnpm run build"` |
 | 改代码不生效 | webman 常驻进程需 reload：`docker exec webman php start.php reload` |
 | 脚本报 `#!/bin/sh^M: not found` | 换行符被改成 CRLF，仓库已带 `.gitattributes`（强制 LF）；必要时 `dos2unix` |
