@@ -17,9 +17,6 @@ on:
         type: boolean
         default: false
 
-env:
-  IMAGE_REPO: ghcr.io/${{ github.repository }}
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,6 +33,14 @@ jobs:
       ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: 规范化镜像仓库名
+        run: |
+          # GHCR 不接受大写字母：仓库属主或名称含大写时，docker push 会直接
+          # 报 invalid reference format，这里统一转小写并作为唯一来源写入 env
+          REPO="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          echo "IMAGE_REPO=ghcr.io/${REPO}" >> "$GITHUB_ENV"
+          echo "IMAGE_REPO = ghcr.io/${REPO}"
 
       - name: 解析 tag → PHP 版本
         id: meta
@@ -69,6 +74,13 @@ jobs:
                 printf 'type = '; cat /etc/s6-overlay/s6-rc.d/webman/type; \
                 echo '--- user bundle ---'; \
                 ls -l /etc/s6-overlay/s6-rc.d/user/contents.d/"
+
+      - name: 推送前诊断
+        if: github.event_name == 'push' || inputs.push
+        run: |
+          echo "镜像仓库 : ${IMAGE_REPO}"
+          echo "待推送镜像："
+          docker images "${IMAGE_REPO}" --format '  {{.Repository}}:{{.Tag}}  ({{.Size}})'
 
       - name: 推送到 GHCR
         if: github.event_name == 'push' || inputs.push
