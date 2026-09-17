@@ -43,7 +43,7 @@ docker-webman/
 
 ```bash
 # 公开包直接拉
-docker pull ghcr.io/![alt text](image.png)
+docker pull ghcr.io/madong-code/docker-webman:8.2-cli-alpine
 
 # 私有包先登录（PAT 需勾选 read:packages）
 echo "<YOUR_GITHUB_PAT>" | docker login ghcr.io -u madong-code --password-stdin
