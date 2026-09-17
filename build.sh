@@ -85,11 +85,17 @@ docker run --rm --entrypoint sh "${IMAGE_REF}" -c '
     echo -n "pnpm: "; pnpm -v
     php -r "exit(extension_loaded(\"pcntl\") && extension_loaded(\"posix\") && extension_loaded(\"event\") ? 0 : 1);" \
         && echo "关键扩展: pcntl / posix / event OK" || { echo "关键扩展缺失"; exit 1; }
-    ls /etc/s6-overlay/s6-rc.d/webman/run >/dev/null && echo "s6 服务定义: OK"
+    # s6 服务定义三项缺一不可：type 缺失会让容器启动即 s6-rc-compile fatal，
+    # user/contents.d/webman 缺失则服务根本不会被启用（曾踩过）
+    [ "$(cat /etc/s6-overlay/s6-rc.d/webman/type 2>/dev/null)" = "longrun" ] \
+        && [ -x /etc/s6-overlay/s6-rc.d/webman/run ] \
+        && [ -f /etc/s6-overlay/s6-rc.d/user/contents.d/webman ] \
+        && echo "s6 服务定义: type=longrun / run 可执行 / user bundle 已注册 OK" \
+        || { echo "s6 服务定义不完整（缺 type、run 或 user bundle）"; exit 1; }
 '
 
 echo
-echo "运行示例："
-echo "  docker run -d --name webman -p 8787:8787 \\"
+echo "运行示例（端口按应用实际监听填，webman 默认 8787，madong 是 8500）："
+echo "  docker run -d --name webman -p 8500:8500 \\"
 echo "    -v /path/to/your-app:/app \\"
 echo "    ${IMAGE_REF}"
