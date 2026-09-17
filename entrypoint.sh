@@ -43,9 +43,15 @@ fi
 
 # ---------------------------------------------------------------------------
 # 依赖自动安装（首次启动，或 vendor 被清空时）
+#   注意：composer install 会同时吃满 CPU / 内存 / 磁盘 IO，而它发生在
+#   「容器启动阶段」。4G 及以下的机器上，这一步足以把整机拖到无响应
+#   （面板打不开、SSH 卡死，只能硬重启）。
+#   低配机建议用 -e AUTO_COMPOSER_INSTALL=0 关掉，提前在本地或 CI 装好 vendor。
 # ---------------------------------------------------------------------------
-if [ -f "${APP_ROOT}/composer.json" ] && [ ! -f "${APP_ROOT}/vendor/autoload.php" ]; then
-    echo "[entrypoint] vendor 不存在，执行 composer install ..."
+if [ "${AUTO_COMPOSER_INSTALL:-1}" = "1" ] \
+    && [ -f "${APP_ROOT}/composer.json" ] \
+    && [ ! -f "${APP_ROOT}/vendor/autoload.php" ]; then
+    echo "[entrypoint] vendor 不存在，执行 composer install ...（可设 AUTO_COMPOSER_INSTALL=0 跳过）"
     (cd "${APP_ROOT}" && composer install \
         --no-interaction \
         --no-scripts \
@@ -55,15 +61,18 @@ if [ -f "${APP_ROOT}/composer.json" ] && [ ! -f "${APP_ROOT}/vendor/autoload.php
 fi
 
 # ---------------------------------------------------------------------------
-# runtime 目录：webman 与 think 系组件都需要可写
+# runtime / storage / public 目录可写
+#   千万不要 chmod -R 整棵树：madong 的 runtime 下可能堆积上万条日志与缓存，
+#   递归改权限会造成 IO 风暴，低配机器同样会被拖死。
+#   真实写入路径都在浅层，只处理目录本身 + 前两层即可。
 # ---------------------------------------------------------------------------
-for d in "${APP_ROOT}/runtime" "${APP_ROOT}/storage"; do
-    if [ -d "$d" ]; then
-        chmod -R 0777 "$d" 2>/dev/null || true
-    fi
-done
 mkdir -p "${APP_ROOT}/runtime" 2>/dev/null || true
-chmod 0777 "${APP_ROOT}/runtime" 2>/dev/null || true
+for d in "${APP_ROOT}/runtime" "${APP_ROOT}/storage" "${APP_ROOT}/public"; do
+    [ -d "$d" ] || continue
+    chmod 0777 "$d" 2>/dev/null || true
+    find "$d" -maxdepth 2 -type d -exec chmod 0777 {} + 2>/dev/null || true
+    find "$d" -maxdepth 2 -type f -name '*.log' -exec chmod 0666 {} + 2>/dev/null || true
+done
 
 # ---------------------------------------------------------------------------
 # 导出前端工作区路径
