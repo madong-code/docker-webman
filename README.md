@@ -37,15 +37,31 @@ docker-webman/
 
 ## 2. 快速开始
 
-### 2.1 构建镜像
+### 2.1 获取镜像
+
+**方式 A：拉取已发布的镜像**（CI 已构建好，推荐）
 
 ```bash
-# 方式一：一键脚本（推荐）
+# 公开包直接拉
+docker pull ghcr.io/<owner>/docker-webman:8.2-cli-alpine
+
+# 私有包先登录（PAT 需勾选 read:packages）
+echo "<YOUR_GITHUB_PAT>" | docker login ghcr.io -u <owner> --password-stdin
+docker pull ghcr.io/<owner>/docker-webman:8.2-cli-alpine
+```
+
+> `<owner>` 换成你的 GitHub 用户名或组织名。国内服务器拉 `ghcr.io` 经常不通，
+> 处理办法见 9.1。
+
+**方式 B：本地构建**
+
+```bash
+# 一键脚本（推荐）
 sh build.sh                                       # 默认 8.2
 sh build.sh 8.3                                   # 指定 PHP 版本
 sh build.sh 8.3 myreg.example.com/docker-webman   # 指定镜像仓库前缀
 
-# 方式二：直接 docker build（脚本已兼容 8.3 / 8.4 / 8.5，按需构建）
+# 或直接用 docker build（脚本已兼容 8.3 / 8.4 / 8.5，按需构建）
 docker build -t docker-webman:8.2-cli-alpine .
 docker build --build-arg PHP_VERSION=8.3 -t docker-webman:8.3-cli-alpine .
 ```
@@ -56,17 +72,20 @@ docker build --build-arg PHP_VERSION=8.3 -t docker-webman:8.3-cli-alpine .
 
 ### 2.2 启动容器
 
+镜像名按你实际使用的替换：拉取的是 `ghcr.io/<owner>/docker-webman:8.2-cli-alpine`，
+本地构建的是 `docker-webman:8.2-cli-alpine`。
+
 ```bash
 docker run -d --name webman \
   -p 8787:8787 \
   -v /path/to/your-app:/app \
-  docker-webman:8.2-cli-alpine
+  ghcr.io/<owner>/docker-webman:8.2-cli-alpine
 ```
 
 Windows（Docker Desktop）：
 
 ```bash
-docker run -d --name webman -p 8787:8787 -v D:/www/your-app:/app docker-webman:8.2-cli-alpine
+docker run -d --name webman -p 8787:8787 -v D:/www/your-app:/app ghcr.io/<owner>/docker-webman:8.2-cli-alpine
 ```
 
 > **端口说明**：默认 **8787**（与 webman 官方默认一致），镜像 `EXPOSE` 与本文示例都用它。
@@ -389,7 +408,74 @@ docker run -d --name webman \
 
 ---
 
-## 9. 常见问题
+## 9. 1Panel 部署
+
+本镜像**不带 compose 编排**，在 1Panel 上直接「创建容器」即可。需要 MySQL / Redis 时，
+用面板应用商店安装，再把容器接入同一网络。
+
+### 9.1 拉取镜像
+
+**容器 → 镜像 → 拉取**：`ghcr.io/<owner>/docker-webman:8.2-cli-alpine`
+（私有包需填 GitHub 用户名 + 带 `read:packages` 的 PAT）
+
+国内服务器拉 `ghcr.io` 通常会失败（1Panel 的「镜像加速」只对 Docker Hub 生效），三种处理：
+
+| 方案 | 做法 |
+| --- | --- |
+| 改为公开包 | GitHub → 你的 Packages → 该包 → Package settings → Change visibility → Public |
+| 让 CI 同时推 ACR | 仓库加 3 个 Secrets：`ACR_IMAGE_PREFIX` / `ACR_USERNAME` / `ACR_PASSWORD`，重跑 workflow；服务器改拉 ACR |
+| 人工中转 | 在能访问 ghcr 的机器 `docker pull` → `docker tag` → `docker push` 到 ACR，服务器再拉 ACR |
+
+### 9.2 创建容器
+
+**容器 → 容器 → 创建容器**：
+
+| 字段 | 填什么 |
+| --- | --- |
+| 名称 | `webman` |
+| 镜像 | `ghcr.io/<owner>/docker-webman:8.2-cli-alpine` |
+| 端口映射 | 宿主 `8787` → 容器 `8787`（后端若用 8500，两边都填 8500） |
+| 挂载 | 宿主 `/opt/app/madong` → 容器 `/app`，**挂仓库根**（含 `backend/` 与 `template/`，不要只挂 `backend`） |
+| 环境变量 | `TZ=Asia/Shanghai` |
+| 重启策略 | 除非停止（unless-stopped） |
+| 网络 | `1panel-network`（要与面板装的 MySQL / Redis 互通就选它） |
+
+### 9.3 验证
+
+容器日志正常应出现：
+
+```
+[entrypoint] PHP        : 8.2.x
+[entrypoint] pnpm       : 10.x
+[entrypoint] APP_ROOT   : /app/backend
+[s6][webman] cwd      = /app/backend
+[s6][webman] template = /app/template
+[s6][webman] command  = php start.php start
+```
+
+面板终端里：
+
+```bash
+curl -i http://127.0.0.1:8787/
+docker exec webman php -m | tr '\n' ' '
+docker exec webman php start.php status
+```
+
+### 9.4 常见报错
+
+| 现象 | 原因 / 处理 |
+| --- | --- |
+| `FATAL: 目录不存在 /app/backend` | 挂载点挂成了 `backend/` 子目录，要挂**仓库根** |
+| 容器起来但端口不通 | 后端 `config/server.php` 的监听端口与映射不一致 |
+| `composer install` 失败 | 容器内出网问题；镜像里 composer 已指向阿里云 |
+| 前端 404 / 空白 | `template/` 未构建：`docker exec webman sh -lc "cd /app/template && pnpm install && pnpm build"` |
+| 需要 MySQL / Redis | 面板应用商店安装，后端 `backend/.env` 的 `DB_HOST` / `REDIS_HOST` 填面板里的容器名，并把容器加入同一网络 |
+
+---
+
+## 10. 常见问题
+
+> 1Panel 相关的报错见 9.4。
 
 | 现象 | 处理 |
 | --- | --- |
