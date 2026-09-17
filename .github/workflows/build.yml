@@ -86,8 +86,23 @@ jobs:
         if: github.event_name == 'push' || inputs.push
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker push "${IMAGE_REPO}:${{ steps.meta.outputs.tag }}"
-          docker push "${IMAGE_REPO}:latest"
+          # GHCR 偶发 `unknown blob`（层上传中断）多为网络抖动，自动重试可越过；
+          # 已成功的层在 registry 侧已存在，重试只会续传剩余部分
+          push_retry() {
+            for i in 1 2 3; do
+              echo "==> docker push $1（第 ${i} 次）"
+              if docker push "$1"; then
+                echo "==> OK: $1"
+                return 0
+              fi
+              echo "!! 第 ${i} 次推送失败，15s 后重试"
+              sleep 15
+            done
+            echo "!! 连续 3 次推送失败：$1"
+            return 1
+          }
+          push_retry "${IMAGE_REPO}:${{ steps.meta.outputs.tag }}"
+          push_retry "${IMAGE_REPO}:latest"
 
       - name: 推送到国内镜像仓库（可选，配了 Secrets 才执行）
         if: (github.event_name == 'push' || inputs.push) && env.ACR_IMAGE_PREFIX != ''
