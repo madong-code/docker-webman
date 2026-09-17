@@ -22,6 +22,11 @@
 # =============================================================================
 
 ARG PHP_VERSION=8.2
+# Node 版本必须固定：apk 的 nodejs 会随基础镜像的 Alpine 仓库漂移，
+# 曾装到 Node 24，导致 template 前端构建 ERR_MODULE_NOT_FOUND（cross-env 解析不到依赖）
+ARG NODE_VERSION=22
+
+FROM node:${NODE_VERSION}-alpine AS nodejs
 
 FROM php:${PHP_VERSION}-cli-alpine
 
@@ -33,8 +38,7 @@ ARG COMPOSER_MIRROR=https://mirrors.aliyun.com/composer/
 ARG EXTENSIONS=
 
 # pnpm 支持（构建 template/ 前端工作区用）
-#   Node 由基础镜像的 Alpine 仓库提供，版本随 Alpine 版本走；
-#   如需固定 Node 版本，可更换基础镜像或自建 node 层
+#   Node 已在上文由 NODE_VERSION 固定（来自官方 node 镜像，非 apk）
 ARG PNPM_VERSION=10
 ARG NPM_MIRROR=https://registry.npmmirror.com
 
@@ -105,9 +109,15 @@ RUN set -eux; \
 #   因此 pnpm 必须：
 #     1. 是镜像内的全局命令，且在标准 PATH 中（后端 exec/shell_exec 子进程能找到）
 #     2. 不依赖宿主机环境，容器重建后依旧可用
+#     3. **Node 版本固定**：从 node:<NODE_VERSION>-alpine COPY 二进制
+#        （两者同为 Alpine/musl，二进制兼容）。不用 apk 的 nodejs —— 它随
+#        Alpine 仓库漂移，曾装到 Node 24 导致前端构建 ERR_MODULE_NOT_FOUND
 # ---------------------------------------------------------------------------
+COPY --from=nodejs /usr/local/bin/node /usr/local/bin/node
+COPY --from=nodejs /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN set -eux; \
-    apk add --no-cache nodejs npm; \
+    ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm; \
+    ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx; \
     npm config set registry "${NPM_MIRROR}"; \
     npm install -g "pnpm@${PNPM_VERSION}"; \
     pnpm config set registry "${NPM_MIRROR}"; \
