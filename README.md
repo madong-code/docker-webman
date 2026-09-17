@@ -519,6 +519,70 @@ docker exec webman php start.php status      # 进程与连接状态
 
 ---
 
+## 11. 小内存服务器（2G / 4G）
+
+madong 的 `template/` 有**四万多个文件**，`vite` 构建 admin 时内存峰值可达 **1.5～3 GB**。
+若同机还跑着 MySQL / Redis / 面板，很容易触发内核 OOM ——
+表现是**容器莫名退出、面板卡死，甚至整机失去响应**。
+
+### 11.1 先确认是不是被 OOM 杀了
+
+```bash
+free -h
+dmesg -T | grep -iE "out of memory|killed process" | tail -20
+docker inspect <容器名> --format '{{.State.OOMKilled}}'    # true 即被 OOM 杀
+```
+
+### 11.2 三道防线
+
+**① 加 swap（最有效的兜底，强烈建议）**
+
+```bash
+fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab     # 开机自动挂载
+free -h
+```
+
+**② 给 Node 限制堆内存**
+
+容器环境变量：
+
+| 变量 | 建议值 | 说明 |
+| --- | --- | --- |
+| `NODE_OPTIONS` | `--max-old-space-size=1536` | 4G 机器给 1.5G；2G 机器给 768，再不够就说明不该在本机构建 |
+| `CI=true` | `true` | 可选，让 pnpm / vite 走非交互模式 |
+
+> `--max-old-space-size` 只约束 V8 堆，`esbuild`（Go 编写）不受它限制，
+> 所以还要靠 ① 的 swap 和 ③ 的容器内存限制兜底。
+
+**③ 限制容器内存，别让它吃光整机**
+
+```bash
+docker run ... --memory=2g --memory-swap=3g ...
+```
+
+容器内 OOM 只会杀掉构建进程（`docker inspect` 显示 `OOMKilled=true`），
+比整机被拖死好得多 —— 至少面板还活着。
+
+### 11.3 最优解：构建离开服务器
+
+4G 机器上构建大型前端本就勉强。更稳的是**在本地或 CI 构建好，只把产物传上去**：
+
+```bash
+# 本地（或任意内存充足的机器），挂载同一份代码
+docker run --rm -v /path/to/app:/app -w /app/template \
+  docker-webman:8.2-cli-alpine \
+  sh -lc "pnpm install --frozen-lockfile && pnpm --filter @your-scope/admin run build:integrated"
+
+# 产物落在 template/admin/dist，上传到服务器的同一路径
+# 后端点「构建Admin前端」时就只剩迁移部署这一步，内存压力极小
+```
+
+服务器常年 4G 的话，建议把「安装依赖 / 构建前端」挪到 CI，
+容器只负责运行 —— 镜像里保留 pnpm 是留着能力，但不是非得在低配机上用。
+
+---
+
 ## License
 
 [Apache License 2.0](./LICENSE)
