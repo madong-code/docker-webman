@@ -1,0 +1,11 @@
+.git
+.github
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*.md
+LICENSE
+
+# 注意：overlay/*.tar.xz 与 extension/pie.phar 是离线构建用的资源，
+# 若已下载到本地，不要加入忽略列表，否则镜像构建时又要联网拉取。

@@ -1,0 +1,9 @@
+# 注意：overlay/*.tar.xz 与 extension/pie.phar 是离线构建资源，
+# 已随仓库一起提供（约 7MB），不加入忽略列表 ——
+# 这样任何构建机（含国内 CI / 无外网服务器）都不需要访问 GitHub 即可构建。
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

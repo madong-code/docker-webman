@@ -1,0 +1,80 @@
+name: build-image
+
+# 版本控制：镜像 tag = PHP 版本号（如 8.2-cli-alpine）
+#   git tag 8.2-cli-alpine        → ghcr.io/<owner>/docker-webman:8.2-cli-alpine
+#   git tag 8.3.4-cli-alpine      → 同上，PHP 版本取 "-" 之前的部分
+on:
+  push:
+    tags:
+      - '[0-9]*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '镜像 tag，同时作为 PHP 版本标识（如 8.3-cli-alpine）'
+        required: true
+      push:
+        description: '是否推送到 GHCR'
+        type: boolean
+        default: false
+
+env:
+  IMAGE_REPO: ghcr.io/${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # 可选：配好下面 3 个 Secrets，镜像会「同时」推送到国内仓库
+      # （国内服务器拉 ghcr.io 通常不通，推 ACR/TCR 后拉取更快）
+      #   ACR_IMAGE_PREFIX = registry.cn-hangzhou.aliyuncs.com/<命名空间>/docker-webman
+      #   ACR_USERNAME / ACR_PASSWORD = 镜像仓库的用户名与密码
+      ACR_IMAGE_PREFIX: ${{ secrets.ACR_IMAGE_PREFIX }}
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析 tag → PHP 版本
+        id: meta
+        run: |
+          set -eu
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          PHP_VERSION="${TAG%%-*}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "php_version=${PHP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "镜像 tag      : ${TAG}"
+          echo "PHP_VERSION   : ${PHP_VERSION}"
+
+      - name: 构建镜像
+        run: |
+          docker build \
+            --build-arg "PHP_VERSION=${{ steps.meta.outputs.php_version }}" \
+            -t "${IMAGE_REPO}:${{ steps.meta.outputs.tag }}" \
+            -t "${IMAGE_REPO}:latest" \
+            .
+
+      - name: 构建结果自检（PHP 版本与扩展）
+        run: |
+          docker run --rm "${IMAGE_REPO}:${{ steps.meta.outputs.tag }}" sh -lc \
+            'php -v && php -m && php -r "exit(extension_loaded(\"pcntl\") && extension_loaded(\"posix\") ? 0 : 1);" && node -v && pnpm -v'
+
+      - name: 推送到 GHCR
+        if: github.event_name == 'push' || inputs.push
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "${IMAGE_REPO}:${{ steps.meta.outputs.tag }}"
+          docker push "${IMAGE_REPO}:latest"
+
+      - name: 推送到国内镜像仓库（可选，配了 Secrets 才执行）
+        if: (github.event_name == 'push' || inputs.push) && env.ACR_IMAGE_PREFIX != ''
+        run: |
+          REGISTRY="${ACR_IMAGE_PREFIX%%/*}"
+          echo "$ACR_PASSWORD" | docker login "$REGISTRY" -u "$ACR_USERNAME" --password-stdin
+          docker tag "${IMAGE_REPO}:${{ steps.meta.outputs.tag }}" "${ACR_IMAGE_PREFIX}:${{ steps.meta.outputs.tag }}"
+          docker tag "${IMAGE_REPO}:latest" "${ACR_IMAGE_PREFIX}:latest"
+          docker push "${ACR_IMAGE_PREFIX}:${{ steps.meta.outputs.tag }}"
+          docker push "${ACR_IMAGE_PREFIX}:latest"
+          echo "已推送：${ACR_IMAGE_PREFIX}:${{ steps.meta.outputs.tag }}"

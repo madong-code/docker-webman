@@ -1,0 +1,47 @@
+#!/bin/sh
+# =============================================================================
+# S6 Overlay v3 longrun 服务：webman
+#   工作目录由 APP_ROOT 决定（默认 /app/backend），
+#   应用仓库根挂载在 /app，因此 /app/template 前端目录同样可读。
+# =============================================================================
+
+# 载入容器环境变量（s6-overlay v3 把它们放在 /run/s6/container_environment）
+for f in /run/s6/container_environment/*; do
+    [ -f "$f" ] && export "$(basename "$f")=$(cat "$f")"
+done
+
+APP_MOUNT="${APP_MOUNT:-/app}"
+BACKEND_DIR="${BACKEND_DIR:-backend}"
+TEMPLATE_DIR="${TEMPLATE_DIR:-template}"
+APP_ROOT="${APP_ROOT:-${APP_MOUNT}/${BACKEND_DIR}}"
+WEBMAN_CMD="${WEBMAN_CMD:-php start.php start}"
+
+# 兼容：仓库根直接就是 webman 应用（无 backend/ 子目录）
+if [ ! -d "${APP_ROOT}" ] && [ -f "${APP_MOUNT}/start.php" ]; then
+    APP_ROOT="${APP_MOUNT}"
+fi
+
+if [ ! -d "${APP_ROOT}" ]; then
+    echo "[s6][webman] FATAL: 目录不存在 ${APP_ROOT}"
+    echo "[s6][webman] 请确认已把应用仓库根挂载到 ${APP_MOUNT}，例如 -v /path/to/app:${APP_MOUNT}"
+    exit 1
+fi
+
+cd "${APP_ROOT}" || exit 1
+
+# ---------------------------------------------------------------------------
+# 前端工作区路径
+#   绝对路径 = ${APP_MOUNT}/${TEMPLATE_DIR}（默认 /app/template）
+#   相对后端工作目录 = ../${TEMPLATE_DIR}（后端按相对路径推算即可命中）
+#   导出给 webman 进程，业务代码也可直接读 APP_TEMPLATE_DIR
+# ---------------------------------------------------------------------------
+APP_TEMPLATE_DIR="${APP_MOUNT}/${TEMPLATE_DIR}"
+export APP_TEMPLATE_DIR
+
+echo "[s6][webman] cwd      = $(pwd)"
+echo "[s6][webman] php      = $(php -r 'echo PHP_VERSION;')"
+echo "[s6][webman] pnpm     = $(pnpm --version 2>/dev/null || echo '未安装')"
+echo "[s6][webman] template = ${APP_TEMPLATE_DIR}"
+echo "[s6][webman] command  = ${WEBMAN_CMD}"
+
+exec sh -c "${WEBMAN_CMD}"

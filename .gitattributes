@@ -1,0 +1,11 @@
+# 统一使用 LF，避免 Windows 下编辑后容器内出现 `#!/bin/sh^M: not found`
+* text=auto eol=lf
+
+*.sh    text eol=lf
+Dockerfile    text eol=lf
+*.ini   text eol=lf
+
+*.tar.xz binary
+*.phar   binary
+*.png    binary
+*.jpg    binary
