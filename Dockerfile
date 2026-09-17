@@ -45,7 +45,6 @@ ENV TZ=Asia/Shanghai \
     COMPOSER_HOME=/root/.composer \
     COMPOSER_ALLOW_SUPERUSER=1 \
     COMPOSER_MIRROR=${COMPOSER_MIRROR} \
-    PNPM_HOME=/root/.local/share/pnpm \
     PIE_VERSION=${PIE_VERSION}
 
 # ---------------------------------------------------------------------------
@@ -110,7 +109,6 @@ RUN set -eux; \
     npm config set registry "${NPM_MIRROR}"; \
     npm install -g "pnpm@${PNPM_VERSION}"; \
     pnpm config set registry "${NPM_MIRROR}"; \
-    pnpm config set store-dir /root/.local/share/pnpm/store --global; \
     _prefix="$(npm prefix -g 2>/dev/null || echo /usr)"; \
     if [ -x "${_prefix}/bin/pnpm" ] && [ "${_prefix}/bin/pnpm" != "/usr/local/bin/pnpm" ]; then \
         ln -sf "${_prefix}/bin/pnpm" /usr/local/bin/pnpm; \
