@@ -43,15 +43,14 @@ docker-webman/
 
 ```bash
 # 公开包直接拉
-docker pull ghcr.io/<owner>/docker-webman:8.2-cli-alpine
+docker pull ghcr.io/madong-code/docker-webman:8.2-cli-alpine
 
 # 私有包先登录（PAT 需勾选 read:packages）
-echo "<YOUR_GITHUB_PAT>" | docker login ghcr.io -u <owner> --password-stdin
-docker pull ghcr.io/<owner>/docker-webman:8.2-cli-alpine
+echo "<YOUR_GITHUB_PAT>" | docker login ghcr.io -u madong-code --password-stdin
+docker pull ghcr.io/madong-code/docker-webman:8.2-cli-alpine
 ```
 
-> `<owner>` 换成你的 GitHub 用户名或组织名。国内服务器拉 `ghcr.io` 经常不通，
-> 处理办法见 9.1。
+> 国内服务器拉 `ghcr.io` 经常不通，处理办法见 9.1。
 
 **方式 B：本地构建**
 
@@ -72,20 +71,20 @@ docker build --build-arg PHP_VERSION=8.3 -t docker-webman:8.3-cli-alpine .
 
 ### 2.2 启动容器
 
-镜像名按你实际使用的替换：拉取的是 `ghcr.io/<owner>/docker-webman:8.2-cli-alpine`，
+镜像名按你实际使用的替换：拉取的是 `ghcr.io/madong-code/docker-webman:8.2-cli-alpine`，
 本地构建的是 `docker-webman:8.2-cli-alpine`。
 
 ```bash
 docker run -d --name webman \
   -p 8787:8787 \
   -v /path/to/your-app:/app \
-  ghcr.io/<owner>/docker-webman:8.2-cli-alpine
+  ghcr.io/madong-code/docker-webman:8.2-cli-alpine
 ```
 
 Windows（Docker Desktop）：
 
 ```bash
-docker run -d --name webman -p 8787:8787 -v D:/www/your-app:/app ghcr.io/<owner>/docker-webman:8.2-cli-alpine
+docker run -d --name webman -p 8787:8787 -v D:/www/your-app:/app ghcr.io/madong-code/docker-webman:8.2-cli-alpine
 ```
 
 > **端口说明**：默认 **8787**（与 webman 官方默认一致），镜像 `EXPOSE` 与本文示例都用它。
@@ -231,7 +230,7 @@ git push origin 8.2-cli-alpine
 1. 从 tag 解析 `PHP_VERSION`（取第一个 `-` 之前的部分，`8.2-cli-alpine` → `8.2`）
 2. `docker build --build-arg PHP_VERSION=<解析结果>`
 3. 跑一次容器自检（`php -v` / `php -m` / `node -v` / `pnpm -v`）
-4. 推送镜像到 GHCR：`ghcr.io/<owner>/docker-webman:<tag>` 与 `:latest`
+4. 推送镜像到 GHCR：`ghcr.io/madong-code/docker-webman:<tag>` 与 `:latest`
 
 ### 5.1 版本矩阵
 
@@ -415,7 +414,7 @@ docker run -d --name webman \
 
 ### 9.1 拉取镜像
 
-**容器 → 镜像 → 拉取**：`ghcr.io/<owner>/docker-webman:8.2-cli-alpine`
+**容器 → 镜像 → 拉取**：`ghcr.io/madong-code/docker-webman:8.2-cli-alpine`
 （私有包需填 GitHub 用户名 + 带 `read:packages` 的 PAT）
 
 国内服务器拉 `ghcr.io` 通常会失败（1Panel 的「镜像加速」只对 Docker Hub 生效），三种处理：
@@ -433,7 +432,7 @@ docker run -d --name webman \
 | 字段 | 填什么 |
 | --- | --- |
 | 名称 | `webman` |
-| 镜像 | `ghcr.io/<owner>/docker-webman:8.2-cli-alpine` |
+| 镜像 | `ghcr.io/madong-code/docker-webman:8.2-cli-alpine` |
 | 端口映射 | 宿主 `8787` → 容器 `8787`（后端若用 8500，两边都填 8500） |
 | 挂载 | 宿主 `/opt/app/madong` → 容器 `/app`，**挂仓库根**（含 `backend/` 与 `template/`，不要只挂 `backend`） |
 | 环境变量 | `TZ=Asia/Shanghai` |
