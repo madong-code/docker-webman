@@ -4,7 +4,9 @@
 # webman 应用运行时镜像
 #
 #   运行形态：PHP CLI Alpine + S6 Overlay v3 托管 webman 常驻进程，
-#   应用挂载在 /app，首次启动自动 composer install，默认监听 8787（与 webman 官方默认一致）。
+#   应用挂载在 /app，首次启动自动 composer install。
+#   监听端口由应用自身配置决定（webman 默认 8787，madong 实际是 8500），镜像不做假设，
+#   映射前先 `php start.php status` 看 listen 列。
 #
 #   两点约定：
 #     1. 应用挂仓库根（含 backend/ 与 template/），webman 工作目录为 /app/backend
@@ -177,6 +179,10 @@ ENV APP_MOUNT=/app \
     WEBMAN_CMD="php start.php start"
 VOLUME ["/app"]
 WORKDIR /app/backend
-EXPOSE 8787
+# EXPOSE 仅作声明，不影响运行与 -p 映射；列出常见端口：
+#   8787 = webman 官方默认
+#   8500 = madong 的 HTTP
+#   3501 = madong 的 websocket push
+EXPOSE 8787 8500 3501
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

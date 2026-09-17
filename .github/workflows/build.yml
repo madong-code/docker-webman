@@ -56,12 +56,19 @@ jobs:
             -t "${IMAGE_REPO}:latest" \
             .
 
-      - name: 构建结果自检（PHP / 扩展 / Node / pnpm）
+      - name: 构建结果自检（PHP / 扩展 / Node / pnpm / s6 服务定义）
         continue-on-error: true          # 仅输出信息，失败不阻塞后续推送
         run: |
           # 必须用 --entrypoint 覆盖镜像入口，否则会启动 s6 + webman（CI 里没有应用目录）
+          # s6 服务定义必须完整打印：缺 type 会让容器启动即 s6-rc-compile fatal，
+          # 而 s6 只报「unable to read .../type」，不看这里很难定位（曾踩过）
           docker run --rm --entrypoint sh "${IMAGE_REPO}:${{ steps.meta.outputs.tag }}" \
-            -c "php -v | head -1; node -v; pnpm -v; php -m | tr '\n' ' '; echo; ls /etc/s6-overlay/s6-rc.d/webman/run"
+            -c "php -v | head -1; node -v; pnpm -v; php -m | tr '\n' ' '; echo; \
+                echo '--- s6 服务定义 ---'; \
+                ls -l /etc/s6-overlay/s6-rc.d/webman/; \
+                printf 'type = '; cat /etc/s6-overlay/s6-rc.d/webman/type; \
+                echo '--- user bundle ---'; \
+                ls -l /etc/s6-overlay/s6-rc.d/user/contents.d/"
 
       - name: 推送到 GHCR
         if: github.event_name == 'push' || inputs.push

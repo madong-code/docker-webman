@@ -87,10 +87,27 @@ Windows（Docker Desktop）：
 docker run -d --name webman -p 8787:8787 -v D:/www/your-app:/app ghcr.io/madong-code/docker-webman:8.2-cli-alpine
 ```
 
-> **端口说明**：默认 **8787**（与 webman 官方默认一致），镜像 `EXPOSE` 与本文示例都用它。
-> 容器内实际监听的端口由后端 `config/server.php` 决定（形如 `listen => http://0.0.0.0:8787`）。
-> 部署时要换成别的端口（例如 8500），改后端配置后按 `-p 8500:8500` 映射即可 ——
-> 容器侧不需任何改动，本文件里的 8787 只是默认示例。
+### 端口必须先确认，再映射
+
+**容器监听什么端口由应用自身的配置决定，不由镜像决定**。`8787` 只是 webman 官方默认值，
+本文的 `docker run` 示例沿用它；换应用（如 madong）就必须换数字，否则映射配得再对也访问不通。
+
+先启动一次，看监听列：
+
+```bash
+docker exec webman php start.php status
+```
+
+常见情况：
+
+| 应用 | 容器内监听 | 端口映射写 |
+| --- | --- | --- |
+| webman 裸装默认 | `http://0.0.0.0:8787` | `-p 8787:8787` |
+| madong | `http://0.0.0.0:8500` | `-p 8500:8500` |
+| madong（前端 websocket 推送） | `websocket://0.0.0.0:3501` | `-p 3501:3501` |
+
+端口来源是后端 `config/server.php` 里的 `listen`；容器侧不需任何改动，
+改后端配置后按同样的数字映射即可。
 
 进入容器 / 查看日志：
 
@@ -433,7 +450,7 @@ docker run -d --name webman \
 | --- | --- |
 | 名称 | `webman` |
 | 镜像 | `ghcr.io/madong-code/docker-webman:8.2-cli-alpine` |
-| 端口映射 | 宿主 `8787` → 容器 `8787`（后端若用 8500，两边都填 8500） |
+| 端口映射 | 按②实际监听填：madong 是 宿主 `8500` → 容器 `8500`（前端推送再加 `3501`）；webman 裸装才用 `8787` |
 | 挂载 | 宿主 `/opt/app/madong` → 容器 `/app`，**挂仓库根**（含 `backend/` 与 `template/`，不要只挂 `backend`） |
 | 环境变量 | `TZ=Asia/Shanghai` |
 | 重启策略 | 除非停止（unless-stopped） |
@@ -455,9 +472,9 @@ docker run -d --name webman \
 面板终端里：
 
 ```bash
-curl -i http://127.0.0.1:8787/
+docker exec webman php start.php status      # 先看 listen 列，确认端口（madong = 8500）
+curl -i http://127.0.0.1:8500/               # 端口按实际监听填
 docker exec webman php -m | tr '\n' ' '
-docker exec webman php start.php status
 ```
 
 ### 9.4 常见报错
