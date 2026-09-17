@@ -149,6 +149,8 @@ COPY config/s6-rc.d/ /etc/s6-overlay/s6-rc.d/
 RUN set -eux; \
     sed -i 's/\r$//' /etc/s6-overlay/s6-rc.d/webman/run; \
     chmod +x /etc/s6-overlay/s6-rc.d/webman/run; \
+    test -f /etc/s6-overlay/s6-rc.d/webman/type; \
+    test -f /etc/s6-overlay/s6-rc.d/webman/run; \
     mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d; \
     touch /etc/s6-overlay/s6-rc.d/user/contents.d/webman
 
