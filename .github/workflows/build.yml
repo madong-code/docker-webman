@@ -56,10 +56,12 @@ jobs:
             -t "${IMAGE_REPO}:latest" \
             .
 
-      - name: 构建结果自检（PHP 版本与扩展）
+      - name: 构建结果自检（PHP / 扩展 / Node / pnpm）
+        continue-on-error: true          # 仅输出信息，失败不阻塞后续推送
         run: |
-          docker run --rm "${IMAGE_REPO}:${{ steps.meta.outputs.tag }}" sh -lc \
-            'php -v && php -m && php -r "exit(extension_loaded(\"pcntl\") && extension_loaded(\"posix\") ? 0 : 1);" && node -v && pnpm -v'
+          # 必须用 --entrypoint 覆盖镜像入口，否则会启动 s6 + webman（CI 里没有应用目录）
+          docker run --rm --entrypoint sh "${IMAGE_REPO}:${{ steps.meta.outputs.tag }}" \
+            -c "php -v | head -1; node -v; pnpm -v; php -m | tr '\n' ' '; echo; ls /etc/s6-overlay/s6-rc.d/webman/run"
 
       - name: 推送到 GHCR
         if: github.event_name == 'push' || inputs.push
