@@ -8,6 +8,10 @@
 # =============================================================================
 set -e
 
+# 显式补全 PATH（/usr/local/bin 是 node / pnpm / composer 所在），
+# 保证容器内任何方式启动的进程都能直呼 pnpm
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:${PATH}}"
+
 APP_MOUNT="${APP_MOUNT:-/app}"
 BACKEND_DIR="${BACKEND_DIR:-backend}"
 TEMPLATE_DIR="${TEMPLATE_DIR:-template}"

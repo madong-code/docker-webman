@@ -10,6 +10,11 @@ for f in /run/s6/container_environment/*; do
     [ -f "$f" ] && export "$(basename "$f")=$(cat "$f")"
 done
 
+# 显式补全 PATH：业务代码用 proc_open()/exec() 起子进程时（如 madong 的
+# core/business/terminal/Terminal.php 调 pnpm），子进程直接继承本进程环境，
+# 不经过登录 shell。path 里必须能找到 /usr/local/bin（node / pnpm 所在）。
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:${PATH}}"
+
 APP_MOUNT="${APP_MOUNT:-/app}"
 BACKEND_DIR="${BACKEND_DIR:-backend}"
 TEMPLATE_DIR="${TEMPLATE_DIR:-template}"
