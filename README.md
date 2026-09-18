@@ -3,6 +3,29 @@
 webman 应用的容器运行时：PHP CLI Alpine + S6 Overlay v3 托管 webman 常驻进程，
 应用挂载在 `/app`，首次启动自动 `composer install`，**默认监听 8787**。
 
+---
+
+> **⚠️ 重要提示：服务器内存小于 16G 时，不要在服务器上用 pnpm 安装依赖或构建前端。**
+>
+> madong 的 `template/` 约 **30 万个文件**，含 **11 个 pnpm workspace 子项目**：
+>
+> | 操作 | 内存峰值 |
+> | --- | --- |
+> | `pnpm install`（11 个 workspace） | 0.8 ~ 1.2 GB |
+> | `vite build`（admin 前端） | **1.5 ~ 3 GB** |
+>
+> 在 4G / 8G 机器上执行，会被内核 OOM 杀掉，表现为**构建莫名中断、容器自动退出，
+> 严重时整机失去响应、只能硬重启**（面板打不开、SSH 卡死）。
+>
+> **推荐做法：在本地或大内存机器上装好依赖、构建完成，再打包上传。**
+>
+> - 打包**必须用 `tar` / `rsync`**（保留符号链接）
+> - **不要用 zip，不要从 Windows 直接复制目录** —— pnpm 的 `node_modules`
+>   由大量符号链接构成，跨平台复制后会全部失效，pnpm 只能推倒重装
+> - 详细步骤见 [第 11 节：小内存服务器](#11-小内存服务器2g--4g)
+
+---
+
 主要特性：
 
 | 特性 | 说明 |
@@ -564,22 +587,60 @@ docker run ... --memory=2g --memory-swap=3g ...
 容器内 OOM 只会杀掉构建进程（`docker inspect` 显示 `OOMKilled=true`），
 比整机被拖死好得多 —— 至少面板还活着。
 
-### 11.3 最优解：构建离开服务器
+### 11.3 最优解：依赖与构建都离开服务器
 
-4G 机器上构建大型前端本就勉强。更稳的是**在本地或 CI 构建好，只把产物传上去**：
+4G / 8G 机器上装依赖、构建大型前端本就勉强。正确姿势是**在本地或 CI 完成这两步，只把结果传上去**。
+
+**内存门槛参考：**
+
+| 服务器内存 | 建议 |
+| --- | --- |
+| **< 8G** | **绝对不要在服务器上跑 pnpm**，依赖与构建全部外部完成 |
+| 8 ~ 16G | 不推荐在服务器构建；非要跑需配 swap + `.npmrc` 降并发 + 容器内存上限 |
+| ≥ 16G | 可以正常使用后台的一键「安装依赖 / 构建前端」 |
+
+**做法一：依赖也一起打包上传（服务器完全不跑 pnpm）**
 
 ```bash
-# 本地（或任意内存充足的机器），挂载同一份代码
-docker run --rm -v /path/to/app:/app -w /app/template \
+# ① 本地安装依赖（Linux / macOS；Windows 请用 WSL 或在容器里装）
+docker run --rm -v /path/to/madong:/app -w /app/template \
   docker-webman:8.2-cli-alpine \
-  sh -lc "pnpm install --frozen-lockfile && pnpm --filter @your-scope/admin run build:integrated"
+  sh -lc "pnpm install --frozen-lockfile"
 
-# 产物落在 template/admin/dist，上传到服务器的同一路径
-# 后端点「构建Admin前端」时就只剩迁移部署这一步，内存压力极小
+# ② 用 tar 打包（关键：保留符号链接。千万不要用 zip）
+tar -czf node-modules.tar.gz \
+  template/node_modules \
+  template/admin/node_modules \
+  template/web/node_modules
+
+# ③ 上传到服务器并解包
+scp node-modules.tar.gz user@yourserver:/opt/docker-data/playground/madong-test/
+ssh user@yourserver 'cd /opt/docker-data/playground/madong-test && tar -xzf node-modules.tar.gz && rm node-modules.tar.gz'
 ```
 
-服务器常年 4G 的话，建议把「安装依赖 / 构建前端」挪到 CI，
-容器只负责运行 —— 镜像里保留 pnpm 是留着能力，但不是非得在低配机上用。
+> **为什么必须是 tar**：pnpm 的 `node_modules` 由大量**符号链接**构成（指向 `.pnpm` 虚拟存储）。
+> `zip` 打包、或用 Windows 资源管理器直接复制目录，都会把符号链接变成普通文件甚至丢失，
+> 结果 pnpm 判定"依赖是坏的"，又要推倒重装 —— 白传一场。
+> 同理，**不要上传在 Windows 下装出来的 `node_modules`**。
+
+**做法二：只传构建产物（服务器连 node_modules 都不需要）**
+
+```bash
+# 本地构建
+docker run --rm -v /path/to/madong:/app -w /app/template/admin \
+  docker-webman:8.2-cli-alpine \
+  sh -lc "pnpm install --frozen-lockfile && pnpm run build:integrated"
+
+# 只上传产物（通常只有几 MB）
+scp -r template/admin/dist user@yourserver:/opt/docker-data/playground/madong-test/template/admin/dist
+```
+
+之后在后台点「构建Admin前端」，就只剩"迁移部署"这一步（把 `dist` 复制到 `backend/public/admin`），几乎不吃内存。
+
+**做法三：CI 里构建（团队协作推荐）**
+
+把安装 / 构建放进 CI，产物归档成 artifact 或直接 rsync 到服务器，
+容器只负责运行 —— 这也正是镜像里保留 pnpm 的原因：**能力留着，但不必在低配机上用**。
 
 ---
 
